@@ -2,6 +2,9 @@ import subprocess
 import json
 import argparse
 import math
+import sqlite3
+import datetime
+import os
 from collections import defaultdict
 
 import requests
@@ -11,6 +14,94 @@ UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like 
 
 COMBUSTIBLES = ["Precio Gasolina 95 E5", "Precio Gasoleo A"]
 ETIQUETAS = {"Precio Gasolina 95 E5": "Gasolina 95", "Precio Gasoleo A": "Gasóleo A"}
+
+DB_PATH = None
+
+
+def _db():
+    global DB_PATH
+    if DB_PATH is None:
+        DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "precios.db")
+    return DB_PATH
+
+
+def init_db():
+    with sqlite3.connect(_db()) as c:
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS precios (
+                ideess TEXT NOT NULL,
+                combustible TEXT NOT NULL,
+                precio REAL NOT NULL,
+                fecha_dato TEXT NOT NULL,
+                ultima_vista TEXT NOT NULL,
+                PRIMARY KEY (ideess, combustible, fecha_dato)
+            )
+        """)
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS estaciones (
+                ideess TEXT PRIMARY KEY,
+                rotulo TEXT,
+                direccion TEXT,
+                municipio TEXT,
+                provincia TEXT,
+                latitud REAL,
+                longitud REAL,
+                horario TEXT
+            )
+        """)
+
+
+def guardar_precios(gasolineras, fecha_dato):
+    now = datetime.datetime.now().isoformat(timespec="minutes")
+    with sqlite3.connect(_db()) as c:
+        for g in gasolineras:
+            ideess = g.get("IDEESS", "")
+            if not ideess:
+                continue
+            c.execute("""
+                INSERT OR IGNORE INTO estaciones (ideess, rotulo, direccion, municipio, provincia, latitud, longitud, horario)
+                VALUES (?,?,?,?,?,?,?,?)
+            """, (
+                ideess, g.get("Rótulo", ""), g.get("Dirección", ""),
+                g.get("Municipio", ""), g.get("Provincia", ""),
+                parse_precio(g.get("Latitud", "")),
+                parse_precio(g.get("Longitud (WGS84)", "")),
+                g.get("Horario", "")
+            ))
+            for campo in COMBUSTIBLES:
+                precio = parse_precio(g.get(campo, ""))
+                if precio is None or precio <= 0:
+                    continue
+                row = c.execute(
+                    "SELECT precio FROM precios WHERE ideess=? AND combustible=? ORDER BY fecha_dato DESC LIMIT 1",
+                    (ideess, campo)
+                ).fetchone()
+                if row and row[0] == precio:
+                    c.execute(
+                        "UPDATE precios SET ultima_vista=? WHERE ideess=? AND combustible=? AND fecha_dato=?",
+                        (now, ideess, campo, fecha_dato)
+                    )
+                else:
+                    c.execute(
+                        "INSERT OR REPLACE INTO precios (ideess, combustible, precio, fecha_dato, ultima_vista) VALUES (?,?,?,?,?)",
+                        (ideess, campo, precio, fecha_dato, now)
+                    )
+
+
+def tendencia(ideess, campo):
+    with sqlite3.connect(_db()) as c:
+        rows = c.execute(
+            "SELECT precio FROM precios WHERE ideess=? AND combustible=? ORDER BY fecha_dato DESC LIMIT 2",
+            (ideess, campo)
+        ).fetchall()
+    if len(rows) < 2:
+        return " "
+    p1, p2 = rows[0][0], rows[1][0]
+    if p1 > p2:
+        return chr(8593)
+    if p1 < p2:
+        return chr(8595)
+    return chr(8594)
 
 
 def _usos():
@@ -33,9 +124,13 @@ def _descargar_json():
     for metodo, fn in [
         ("curl.exe", lambda: subprocess.run(["curl.exe", "-s", "--max-time", "30", URL_MITECO, "-A", UA, "-H", "Accept: application/json"], capture_output=True)),
         ("PowerShell", lambda: subprocess.run(["powershell.exe", "-NoProfile", "-Command", f'(Invoke-RestMethod -Uri \'{URL_MITECO}\' -Headers @{{"User-Agent"="{UA}";"Accept"="application/json"}} -TimeoutSec 30) | ConvertTo-Json -Depth 10 -Compress'], capture_output=True, text=True)),
+        ("requests", lambda: requests.get(URL_MITECO, headers={"User-Agent": UA, "Accept": "application/json"}, timeout=30)),
     ]:
         try:
             result = fn()
+            if metodo == "requests":
+                result.raise_for_status()
+                return result.json()
             if result.returncode != 0:
                 continue
             raw = result.stdout
@@ -43,6 +138,8 @@ def _descargar_json():
                 raw = raw.decode("utf-8")
             return json.loads(raw)
         except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):
+            continue
+        except requests.RequestException:
             continue
     raise RuntimeError("No se pudo descargar los datos.")
 
@@ -109,7 +206,7 @@ def osrm_distancias(origen_lat, origen_lon, destinos):
     for d in destinos:
         coords += f";{d['lon']},{d['lat']}"
     url = f"https://router.project-osrm.org/table/v1/driving/{coords}?sources=0&annotations=distance"
-    r = requests.get(url, headers={"User-Agent": "fuelprices-app/1.0"}, timeout=30)
+    r = requests.get(url, headers={"User-Agent": "fuelprices-app/1.0"}, timeout=60)
     r.raise_for_status()
     data = r.json()
     if data.get("code") != "Ok":
@@ -144,6 +241,11 @@ def _calcular_score(precio, dist, min_precio, max_precio, min_dist, max_dist):
     return (sp + sd) / 2
 
 
+def tend_str(ideess, campo):
+    t = tendencia(ideess, campo)
+    return t
+
+
 def cerca_ranking(gasolineras, lat, lon, args):
     radio_km = args.radio
     top = args.top
@@ -166,6 +268,7 @@ def cerca_ranking(gasolineras, lat, lon, args):
             candidatos.append({
                 "precio": precio,
                 "gasolinera": g,
+                "ideess": g.get("IDEESS", ""),
                 "lat": g_lat,
                 "lon": g_lon,
                 "dist_recta": dist_recta,
@@ -200,12 +303,13 @@ def cerca_ranking(gasolineras, lat, lon, args):
 
         candidatos.sort(key=key)
 
-        print(f"    {'#':<3} {'Precio':>8} {'Dist':>7} {'Score':>6}  Estación")
-        print(f"    {'-'*3:<3} {'-'*8:>8} {'-'*7:>7} {'-'*6:>6}  {'-'*42}")
+        print(f"    {'#':<3} {'Precio':>8} {'Dist':>7} {'Score':>6} {'Tend':>4}  Estación")
+        print(f"    {'-'*3:<3} {'-'*8:>8} {'-'*7:>7} {'-'*6:>6} {'-'*4:>4}  {'-'*42}")
         for i, cnd in enumerate(candidatos[:top], 1):
             g = cnd["gasolinera"]
             dist_str = f"{cnd['dist']:.1f}km" if cnd["dist"] < 100 else f"{cnd['dist']:.0f}km"
-            print(f"    {i:<3} {cnd['precio']:.3f}€ {dist_str:>7} {cnd['score']:>5.0f}  {g.get('Rótulo', '')}")
+            t = tend_str(cnd["ideess"], c)
+            print(f"    {i:<3} {cnd['precio']:.3f}€ {dist_str:>7} {cnd['score']:>5.0f} {t:>4}  {g.get('Rótulo', '')}")
             print(f"        {g.get('Dirección', '')}, {g.get('Municipio', '')} ({g.get('Provincia', '')})")
             if g.get("Horario"):
                 print(f"        {g['Horario']}")
@@ -255,6 +359,9 @@ def _ejecutar(args):
     print("Descargando datos...", end=" ")
     gasolineras, fecha = descargar_datos()
     print(f"OK ({len(gasolineras)} estaciones) - Datos: {fecha}")
+
+    init_db()
+    guardar_precios(gasolineras, fecha)
 
     if args.gps:
         print("Obteniendo ubicación por GPS...")
