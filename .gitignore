@@ -4,3 +4,26 @@ build/
 *.pyc
 precios.db
 web_test.html
+
+# Scripts con token de PythonAnywhere (no subir)
+deploy*.py
+sync_pa.py
+sync_pa.bat
+sync_pa.log
+
+# Datos regenerados a diario (sync local -> PythonAnywhere)
+datos.json
+datos_italia.json
+
+# Pruebas / exploración
+check*.py
+test*.py
+find*.py
+scan_api.py
+snapshot.py
+analyze_page.py
+kill_console.py
+console*.html
+pa_console_page.html
+gasall_*.apk
+gasall_src/

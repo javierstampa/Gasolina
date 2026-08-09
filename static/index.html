@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>GasAll Web</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div id="app">
+  <div id="map"></div>
+
+  <header id="topbar">
+    <div class="search-wrap">
+      <input id="search" type="text" placeholder="Buscar lugar o dirección…" autocomplete="off">
+      <button id="btn-gps" title="Usar mi ubicación">📍</button>
+    </div>
+    <div id="search-suggestions" class="hidden"></div>
+  </header>
+
+  <div id="filterbar">
+    <div id="country-seg" class="seg">
+      <button data-pais="espana" class="active">🇪🇸 España</button>
+      <button data-pais="italia">🇮🇹 Italia</button>
+    </div>
+    <div id="fuel-chips" class="chips"></div>
+    <div class="sort-row">
+      <span class="seg" id="scope-seg">
+        <button data-scope="cerca" class="active">📍 Cerca</button>
+        <button data-scope="pais">🇪🇸 Todo el país</button>
+      </span>
+      <span class="seg" id="sort-seg">
+        <button data-sort="balance" class="active">Balance</button>
+        <button data-sort="precio">Precio</button>
+        <button data-sort="distancia">Distancia</button>
+      </span>
+      <span class="toggles">
+        <label class="toggle"><input type="checkbox" id="chk-open"><span>Abiertas</span></label>
+        <label class="toggle"><input type="checkbox" id="chk-favs"><span>Favoritas</span></label>
+      </span>
+    </div>
+    <div class="radius-row" id="radius-row">
+      <label for="sel-radius">Radio</label>
+      <select id="sel-radius">
+        <option value="5">5 km</option>
+        <option value="15">15 km</option>
+        <option value="30">30 km</option>
+        <option value="60" selected>60 km</option>
+        <option value="120">120 km</option>
+        <option value="250">250 km</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="panel-toggle" class="hidden">↑ Lista</div>
+
+  <div id="list-panel">
+    <div id="list-header">
+      <span id="list-title">Gasolineras</span>
+      <span id="list-meta"></span>
+    </div>
+    <div id="station-list"></div>
+    <div id="list-empty">No hay estaciones aquí.</div>
+  </div>
+
+  <div id="bottom-nav">
+    <button data-view="stations" class="active"><span>🗺️</span>Estaciones</button>
+    <button data-view="route"><span>🛣️</span>Ruta</button>
+    <button data-view="favorites"><span>⭐</span>Favoritos</button>
+    <button data-view="more"><span>⚙️</span>Más</button>
+  </div>
+
+  <!-- Vista Ruta -->
+  <div id="view-route" class="view hidden">
+    <h2>🛣️ Gasolineras en ruta</h2>
+    <input id="route-origin" type="text" placeholder="Origen">
+    <input id="route-dest" type="text" placeholder="Destino">
+    <div class="row">
+      <label>Combustible
+        <select id="route-fuel"></select>
+      </label>
+      <label>Desvío máx
+        <select id="route-radio"><option value="2">2 km</option><option value="3" selected>3 km</option><option value="5">5 km</option><option value="8">8 km</option></select>
+      </label>
+    </div>
+    <button id="btn-route" class="btn-primary">Calcular ruta</button>
+    <div id="route-results"></div>
+  </div>
+
+  <!-- Vista Favoritos -->
+  <div id="view-favorites" class="view hidden">
+    <h2>⭐ Mis favoritas</h2>
+    <div id="fav-list"></div>
+    <div id="fav-empty">Guarda estaciones tocando la estrella ⭐</div>
+  </div>
+
+  <!-- Vista Más -->
+  <div id="view-more" class="view hidden">
+    <h2>⚙️ Ajustes</h2>
+    <div class="card">
+      <h3>Mi vehículo</h3>
+      <label>Capacidad del depósito (L)
+        <input id="cfg-tank" type="number" step="1" placeholder="50">
+      </label>
+      <label>Consumo (L/100km)
+        <input id="cfg-cons" type="number" step="0.1" placeholder="6.0">
+      </label>
+      <label>Distancia aprox. al repostar (km)
+        <input id="cfg-dist" type="number" step="1" placeholder="500">
+      </label>
+      <button id="btn-save-vehicle" class="btn-primary">Guardar</button>
+    </div>
+    <div class="card">
+      <h3>Datos</h3>
+      <p class="dim" id="data-fecha">—</p>
+      <p class="dim" id="data-count">—</p>
+      <button id="btn-refresh" class="btn-secondary">🔄 Actualizar datos</button>
+    </div>
+    <div class="card">
+      <h3>Acerca de</h3>
+      <p class="dim">Recreación web inspirada en GasAll. Datos de precios oficiales del MITECO.</p>
+      <p class="dim">v0.1.0</p>
+    </div>
+  </div>
+
+  <!-- Sheet de detalle -->
+  <div id="detail-sheet" class="hidden">
+    <div id="sheet-handle"></div>
+    <button id="sheet-close" title="Cerrar">✕</button>
+    <div id="detail-body"></div>
+  </div>
+</div>
+
+<div id="loading" class="hidden"><div class="spinner"></div><span>Buscando…</span></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
