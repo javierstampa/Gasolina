@@ -1,16 +1,40 @@
 import SwiftUI
 import WebKit
 
+let GASALL_URL = URL(string: "https://javierstampa33.pythonanywhere.com/")!
+
 struct ContentView: View {
+    @State private var isLoading = true
+
     var body: some View {
-        WebView(url: URL(string: "https://javierstampa33.pythonanywhere.com/")!)
+        ZStack {
+            WebView(url: GASALL_URL, isLoading: $isLoading)
+            if isLoading {
+                VStack(spacing: 14) {
+                    ProgressView()
+                        .scaleEffect(1.6)
+                    Text("Cargando GasAll…")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(.systemBackground))
+            }
+        }
     }
 }
 
 struct WebView: UIViewRepresentable {
     let url: URL
+    @Binding var isLoading: Bool
 
-    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeCoordinator() -> Coordinator {
+        Coordinator { loading in
+            DispatchQueue.main.async {
+                self.isLoading = loading
+            }
+        }
+    }
 
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -30,6 +54,28 @@ struct WebView: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+        let onLoadState: (Bool) -> Void
+
+        init(onLoadState: @escaping (Bool) -> Void) {
+            self.onLoadState = onLoadState
+        }
+
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            onLoadState(true)
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            onLoadState(false)
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            onLoadState(false)
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            onLoadState(false)
+        }
+
         func webView(_ webView: WKWebView,
                      requestGeolocationPermissionFor origin: WKSecurityOrigin,
                      initiatedByFrame frame: WKFrameInfo,
