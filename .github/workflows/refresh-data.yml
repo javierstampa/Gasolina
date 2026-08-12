@@ -1,0 +1,45 @@
+name: refresh-data
+
+on:
+  schedule:
+    - cron: "30 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: master
+
+      - name: Fetch datos
+        run: |
+          pip install requests -q
+          python fetch_data.py
+
+      - name: Commit snapshots (bounded history)
+        run: |
+          git config user.name "gasall-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add datos.json datos_italia.json
+          last=$(git log -1 --format=%s)
+          if [ "$last" = "Datos: snapshot diario" ]; then
+            git commit --amend --no-edit
+          else
+            git commit -m "Datos: snapshot diario"
+          fi
+          git push --force origin master
+
+      - name: Desplegar en Render
+        env:
+          RENDER_API_KEY: ${{ secrets.RENDER_API_KEY }}
+          RENDER_SVC: ${{ secrets.RENDER_SVC }}
+        run: |
+          curl -s -X POST "https://api.render.com/v1/services/$RENDER_SVC/deploys" \
+            -H "Authorization: Bearer $RENDER_API_KEY" \
+            -H "Content-Type: application/json" -d '{}'
