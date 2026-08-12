@@ -11,8 +11,14 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - GasAll
-    resources:
-      - path: ../static
+    postBuildScripts:
+      - name: Copiar web app
+        script: |
+          set -e
+          APP="${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
+          mkdir -p "${APP}/static"
+          cp -R "${SRCROOT}/../static/." "${APP}/static/"
+          echo "Web app copiada a ${APP}/static"
     info:
       path: GasAll/Info.plist
       properties:
