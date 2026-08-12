@@ -74,7 +74,14 @@ struct ContentView: View {
                     .ignoresSafeArea()
             }
             switch phase {
-            case .idle, .downloading(let msg):
+            case .idle:
+                VStack(spacing: 16) {
+                    ProgressView().scaleEffect(1.6)
+                    Text("Preparando…").font(.footnote).foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(.systemBackground))
+            case .downloading(let msg):
                 VStack(spacing: 16) {
                     ProgressView().scaleEffect(1.6)
                     Text(msg).font(.footnote).foregroundColor(.secondary)
@@ -136,8 +143,10 @@ struct GasWebView: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     final class Coordinator: NSObject, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler {
-        func webView(_ webView: WKWebView, didReceive message: WKScriptMessage) {
+        func userContentController(_ userContentController: WKUserContentController,
+                                   didReceive message: WKScriptMessage) {
             guard message.name == "gasall",
+                  let webView = message.webView,
                   let body = message.body as? [String: Any],
                   body["type"] as? String == "refresh" else { return }
             Task {
@@ -170,7 +179,7 @@ struct GasWebView: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView,
-                     requestUserMediaPermissionFor origin: WKSecurityOrigin,
+                     requestMediaCapturePermissionFor origin: WKSecurityOrigin,
                      initiatedByFrame frame: WKFrameInfo,
                      type: WKMediaCaptureType,
                      decisionHandler: @escaping (WKPermissionDecision) -> Void) {
