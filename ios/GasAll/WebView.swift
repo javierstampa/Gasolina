@@ -43,6 +43,17 @@ enum DataFetcher {
     }
 
     private static func fetch(_ url: URL) async throws -> Data {
+        do {
+            return try await urlSessionFetch(url)
+        } catch {
+            // MITECO/MIMIT rechazan a veces el TLS de URLSession (no es el de un navegador).
+            // Reintento con la pila TLS de WebKit (la de Safari), que sí aceptan.
+            let text = try await WebViewTextFetcher.shared.fetchText(from: url)
+            return Data(text.utf8)
+        }
+    }
+
+    private static func urlSessionFetch(_ url: URL) async throws -> Data {
         var req = URLRequest(url: url)
         req.setValue(UA, forHTTPHeaderField: "User-Agent")
         req.timeoutInterval = 120
@@ -52,6 +63,59 @@ enum DataFetcher {
                           userInfo: [NSLocalizedDescriptionKey: "HTTP \(http.statusCode)"])
         }
         return data
+    }
+}
+
+/* Descarga usando un WKWebView (misma pila TLS que Safari). */
+@MainActor
+final class WebViewTextFetcher: NSObject, WKNavigationDelegate {
+    static let shared = WebViewTextFetcher()
+    private var continuation: CheckedContinuation<String, Error>?
+    private var webView: WKWebView?
+    private var timer: Timer?
+
+    func fetchText(from url: URL) async throws -> String {
+        try await withCheckedThrowingContinuation { cont in
+            continuation = cont
+            let config = WKWebViewConfiguration()
+            let wv = WKWebView(frame: .zero, configuration: config)
+            wv.navigationDelegate = self
+            webView = wv
+            timer = Timer.scheduledTimer(withTimeInterval: 120, repeats: false) { [weak self] _ in
+                self?.finish(error: URLError(.timedOut))
+            }
+            wv.load(URLRequest(url: url))
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        webView.evaluateJavaScript("document.body.innerText") { [weak self] result, _ in
+            if let s = result as? String {
+                self?.finish(value: s)
+            } else {
+                self?.finish(error: URLError(.cannotParseResponse))
+            }
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        finish(error: error)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        finish(error: error)
+    }
+
+    private func finish(value: String) {
+        timer?.invalidate(); timer = nil
+        webView?.stopLoading(); webView = nil
+        continuation?.resume(returning: value); continuation = nil
+    }
+
+    private func finish(error: Error) {
+        timer?.invalidate(); timer = nil
+        webView?.stopLoading(); webView = nil
+        continuation?.resume(throwing: error); continuation = nil
     }
 }
 
