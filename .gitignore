@@ -12,13 +12,14 @@ sync_pa.py
 sync_pa.bat
 sync_pa.log
 
-# Datos regenerados a diario (sync local -> git/Render). Se versionan para que
-# Render sirva los snapshots sin depender de MITECO (bloquea IPs de datacenter).
-# El sync usa 'commit --amend' para no acumular historial.
+# Datos regenerados (la app los descarga directamente de MITECO/MIMIT)
+datos.json
+datos_italia.json
 
 # Pruebas / exploración
 check*.py
 test*.py
+test*.js
 find*.py
 scan_api.py
 snapshot.py

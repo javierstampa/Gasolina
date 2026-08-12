@@ -11,6 +11,8 @@ targets:
     deploymentTarget: "16.0"
     sources:
       - GasAll
+    resources:
+      - path: ../static
     info:
       path: GasAll/Info.plist
       properties:
