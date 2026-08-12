@@ -1,7 +1,7 @@
 import SwiftUI
 import WebKit
 
-let GASALL_URL = URL(string: "https://javierstampa33.pythonanywhere.com/")!
+let GASALL_URL = URL(string: "https://gasall.onrender.com/")!
 
 struct ContentView: View {
     @State private var isLoading = true

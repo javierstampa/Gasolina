@@ -7,13 +7,14 @@ web_test.html
 
 # Scripts con token de PythonAnywhere (no subir)
 deploy*.py
+render.key
 sync_pa.py
 sync_pa.bat
 sync_pa.log
 
-# Datos regenerados a diario (sync local -> PythonAnywhere)
-datos.json
-datos_italia.json
+# Datos regenerados a diario (sync local -> git/Render). Se versionan para que
+# Render sirva los snapshots sin depender de MITECO (bloquea IPs de datacenter).
+# El sync usa 'commit --amend' para no acumular historial.
 
 # Pruebas / exploración
 check*.py
